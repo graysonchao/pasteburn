@@ -1,35 +1,58 @@
 package pasteburn
 
 import (
+	"log"
+
+	"github.com/boltdb/bolt"
 	"github.com/nu7hatch/gouuid"
-	"io/ioutil"
-	"os"
 )
 
+// A Note containing arbitrary text.
 type Note struct {
 	Body []byte
 }
 
-func (n *Note) save() (string, error) {
+// Save a Note, assigning it a UUID and returning that UUID.
+func (n *Note) Save() (string, error) {
 	uuid, err := uuid.NewV4()
-	filename := uuid.String()
+	name := uuid.String()
+
+	db, err := bolt.Open("pasteburn.db", 0600, nil)
+	defer db.Close()
+
+	err = db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("Notes"))
+		err = b.Put([]byte(name), n.Body)
+		return err
+	})
+
 	if err != nil {
-		return filename, err
+		log.Fatal(err)
 	}
 
-	err = ioutil.WriteFile(filename, n.Body, 0600)
-	if err != nil {
-		return filename, err
-	}
-
-	return filename, nil
+	return name, nil
 }
 
-func loadNote(filename string) (*Note, error) {
-	body, err := ioutil.ReadFile(filename)
-	os.Remove(filename)
+func LoadNote(name string) (*Note, error) {
+
+	db, err := bolt.Open("pasteburn.db", 0600, nil)
+	defer db.Close()
+
+	var body []byte
+
+	err = db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("Notes"))
+
+		value := b.Get([]byte(name))
+		body = make([]byte, len(value))
+		copy(body, value)
+
+		return b.Delete([]byte(name))
+	})
+
 	if err != nil {
 		return nil, err
 	}
+
 	return &Note{Body: body}, nil
 }
