@@ -58,7 +58,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	initDb()
-	http.HandleFunc("/", addHandler)
-	http.HandleFunc("/view", viewHandler)
+	http.HandleFunc("/api/create", addHandler)
+	http.HandleFunc("/api/view", viewHandler)
 	http.ListenAndServe("127.0.0.1:8080", nil)
 }
