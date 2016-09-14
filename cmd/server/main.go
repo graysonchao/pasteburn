@@ -31,11 +31,16 @@ func addHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			fmt.Fprintf(w, "Error! %s", err)
 		}
-		var n pasteburn.Note
-		if err := json.Unmarshal(body, &n); err != nil {
+		var req struct {
+			ID   string
+			Body string
+			Key  string
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
 			fmt.Fprintf(w, "Error! %s", err)
 		}
-		n.Save()
+		n := &pasteburn.Note{ID: req.ID, Body: req.Body}
+		n.Save([]byte(req.Key))
 		json.NewEncoder(w).Encode(n)
 	}
 }
@@ -46,8 +51,9 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		query := r.URL.Query()
 		name := query.Get("name")
+		key := query.Get("key")
 
-		n, err := pasteburn.LoadNote([]byte(name))
+		n, err := pasteburn.LoadNote([]byte(name), []byte(key))
 		if err != nil {
 			log.Fatal(err)
 		}

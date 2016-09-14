@@ -1,6 +1,10 @@
 package pasteburn
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"io"
 	"log"
 
 	"github.com/boltdb/bolt"
@@ -14,7 +18,7 @@ type Note struct {
 }
 
 // Save a Note, assigning it a UUID and returning that UUID.
-func (n *Note) Save() (*Note, error) {
+func (n *Note) Save(key []byte) (*Note, error) {
 	if len(n.ID) == 0 {
 		uuid, err := uuid.NewV4()
 		if err != nil {
@@ -23,23 +27,53 @@ func (n *Note) Save() (*Note, error) {
 		n.ID = uuid.String()
 	}
 
-	db, err := bolt.Open("pasteburn.db", 0600, nil)
-	defer db.Close()
-
-	err = db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("Notes"))
-		err = b.Put([]byte(n.ID), []byte(n.Body))
-		return err
-	})
-
+	block, err := aes.NewCipher(key)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
+	}
+
+	// Input to AES cipher must be padded to a multiple of aes.BlockSize
+	plaintext := make([]byte, (len(n.Body)%aes.BlockSize)+aes.BlockSize)
+	copy(plaintext, n.Body)
+
+	// Add an additional block worth of data to insert the IV at the beginning
+	ciphertext := make([]byte, (len(n.Body)%aes.BlockSize)+(2*aes.BlockSize))
+	iv := ciphertext[:aes.BlockSize]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return nil, err
+	}
+
+	mode := cipher.NewCBCEncrypter(block, iv)
+	mode.CryptBlocks(ciphertext[aes.BlockSize:], plaintext)
+
+	if err := saveToDb([]byte(n.ID), ciphertext); err != nil {
+		return nil, err
 	}
 
 	return n, nil
 }
 
-func LoadNote(id []byte) (*Note, error) {
+func saveToDb(key []byte, value []byte) error {
+	db, err := bolt.Open("pasteburn.db", 0600, nil)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	if err = db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("Notes"))
+		err = b.Put(key, value)
+		return err
+	}); err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	return nil
+}
+
+// LoadNote returns the note with the given id, decrypted using the given key
+func LoadNote(id []byte, key []byte) (*Note, error) {
 
 	db, err := bolt.Open("pasteburn.db", 0600, nil)
 	defer db.Close()
@@ -49,9 +83,20 @@ func LoadNote(id []byte) (*Note, error) {
 	err = db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("Notes"))
 
-		value := b.Get([]byte(id))
-		body = make([]byte, len(value))
-		copy(body, value)
+		ciphertext := b.Get([]byte(id))
+
+		block, err := aes.NewCipher(key)
+		iv := ciphertext[:aes.BlockSize]
+
+		mode := cipher.NewCBCDecrypter(block, iv)
+		mode.CryptBlocks(ciphertext, ciphertext)
+
+		if err != nil {
+			return err
+		}
+
+		body = make([]byte, len(ciphertext))
+		copy(body, ciphertext)
 
 		return b.Delete([]byte(id))
 	})
@@ -59,6 +104,8 @@ func LoadNote(id []byte) (*Note, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	log.Print(body)
 
 	return &Note{ID: string(id), Body: string(body)}, nil
 }
