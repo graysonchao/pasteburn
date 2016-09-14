@@ -1,0 +1,3 @@
+# Pasteburn
+
+`burn after reading`
