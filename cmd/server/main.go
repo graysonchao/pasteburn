@@ -6,9 +6,9 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/boltdb/bolt"
 	"github.com/graysonchao/pasteburn"
-	log "github.com/sirupsen/logrus"
 )
 
 func initDb() error {
