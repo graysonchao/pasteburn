@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 
 	"github.com/boltdb/bolt"
 	"github.com/graysonchao/pasteburn"
+	log "github.com/sirupsen/logrus"
 )
 
 func initDb() error {

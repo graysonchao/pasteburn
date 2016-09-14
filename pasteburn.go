@@ -5,8 +5,8 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"io"
-	"log"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/boltdb/bolt"
 	"github.com/nu7hatch/gouuid"
 )
@@ -105,7 +105,10 @@ func LoadNote(id []byte, key []byte) (*Note, error) {
 		return nil, err
 	}
 
-	log.Print(body)
+	log.WithFields(log.Fields{
+		"id":   id,
+		"body": body,
+	}).Debug("Loaded encrypted note")
 
 	return &Note{ID: string(id), Body: string(body)}, nil
 }
