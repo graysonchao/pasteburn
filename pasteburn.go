@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"io"
 
@@ -16,8 +17,31 @@ import (
 // A Note contains arbitrary data.
 // It does not know how ot
 type Note struct {
-	ID   uuid.UUID `json:"id"`
-	Body []byte    `json:"body"`
+	ID      uuid.UUID `json:"id"`
+	Body    []byte    `json:"body"`
+	Crypted bool
+}
+
+// MarshalJSON customizes how a Note is marshalled in JSON.
+// In particular, we wish to display the UUID as a string instead of a series of bytes.
+func (n *Note) MarshalJSON() ([]byte, error) {
+	if n.Crypted {
+		return json.Marshal(&struct {
+			ID   string
+			Body []byte
+		}{
+			ID:   n.ID.String(),
+			Body: n.Body,
+		})
+	} else {
+		return json.Marshal(&struct {
+			ID   string
+			Body string
+		}{
+			ID:   n.ID.String(),
+			Body: string(n.Body),
+		})
+	}
 }
 
 // AES256KeySizeBytes is the appropriate size for an AES256 encryption key
@@ -33,6 +57,7 @@ func MakeNote(body []byte, key []byte) (*Note, error) {
 		log.WithFields(log.Fields{
 			"keyLength": len(key),
 			"keyHash":   sha256.Sum256(key),
+			"key":       string(key),
 		}).Fatal(err)
 		return nil, err
 	}
@@ -113,6 +138,9 @@ func (n *Note) encryptInPlace(key []byte) error {
 
 	mode := cipher.NewCBCEncrypter(cb, iv)
 	mode.CryptBlocks(n.Body[aes.BlockSize:], n.Body[aes.BlockSize:])
+
+	n.Crypted = true
+
 	return nil
 }
 
@@ -121,6 +149,7 @@ func (n *Note) decryptInPlace(key []byte) error {
 	if err != nil {
 		log.WithFields(log.Fields{
 			"key_sha256": sha256.Sum256(key),
+			"key":        string(key),
 		}).Fatal("Failed to create cipher")
 		return err
 	}
@@ -209,6 +238,8 @@ func LoadNote(id uuid.UUID, key []byte) (*Note, error) {
 		}).Fatal("Failed to decrypt note")
 		return nil, err
 	}
+
+	n.Crypted = false
 
 	return n, nil
 }

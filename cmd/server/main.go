@@ -9,6 +9,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/boltdb/bolt"
 	"github.com/graysonchao/pasteburn"
+	uuid "github.com/nu7hatch/gouuid"
 )
 
 func initDb() error {
@@ -27,20 +28,32 @@ func addHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 	} else {
 
-		body, err := ioutil.ReadAll(r.Body)
+		rbody, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			fmt.Fprintf(w, "Error! %s", err)
 		}
 		var req struct {
-			ID   string
 			Body string
 			Key  string
 		}
-		if err := json.Unmarshal(body, &req); err != nil {
+		if err := json.Unmarshal(rbody, &req); err != nil {
 			fmt.Fprintf(w, "Error! %s", err)
 		}
-		n := &pasteburn.Note{ID: req.ID, Body: req.Body}
-		n.Save([]byte(req.Key))
+
+		nbody := []byte(req.Body)
+		key := []byte(req.Key)
+		if err != nil {
+			fmt.Fprintf(w, "Error! %s", err)
+		}
+
+		n, err := pasteburn.MakeNote(nbody, key)
+		if err != nil {
+			fmt.Fprintf(w, "Error! %s", err)
+		}
+		if err := n.Save(); err != nil {
+			fmt.Fprintf(w, "Error! %s", err)
+		}
+
 		json.NewEncoder(w).Encode(n)
 	}
 }
@@ -50,10 +63,14 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 	} else {
 		query := r.URL.Query()
-		name := query.Get("name")
-		key := query.Get("key")
+		key := []byte(query.Get("key"))
 
-		n, err := pasteburn.LoadNote([]byte(name), []byte(key))
+		uuid, err := uuid.ParseHex(query.Get("name"))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		n, err := pasteburn.LoadNote(*uuid, key)
 		if err != nil {
 			log.Fatal(err)
 		}
