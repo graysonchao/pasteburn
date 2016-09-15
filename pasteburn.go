@@ -20,9 +20,22 @@ type Note struct {
 	Body []byte    `json:"body"`
 }
 
+// AES256KeySizeBytes is the appropriate size for an AES256 encryption key
+// See https://golang.org/pkg/crypto/aes/
+const AES256KeySizeBytes int = 32
+
 // MakeNote returns a *Note whose Body is the given body encrypted with the given key.
 // The ID of the note is a UUID generated at the time of creation.
 func MakeNote(body []byte, key []byte) (*Note, error) {
+
+	if len(key) != AES256KeySizeBytes {
+		err := errors.New("Tried to make a note with AES256 key of the wrong length")
+		log.WithFields(log.Fields{
+			"keyLength": len(key),
+			"keyHash":   sha256.Sum256(key),
+		}).Fatal(err)
+		return nil, err
+	}
 
 	uuid, err := uuid.NewV4()
 	if err != nil {
