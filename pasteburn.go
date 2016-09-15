@@ -9,48 +9,53 @@ import (
 	"errors"
 	"io"
 
+	"golang.org/x/net/context"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/boltdb/bolt"
 	"github.com/nu7hatch/gouuid"
 )
 
-// A Note contains arbitrary data.
-// It does not know how ot
-type Note struct {
-	ID      uuid.UUID `json:"id"`
-	Body    []byte    `json:"body"`
-	Crypted bool
+// Service is a CRUD interface for Pasteburn documents.
+type Service interface {
+	PostDocument(ctx context.Context, d Document) error
+	GetDocument(ctx context.Context, d Document) (Document, error)
 }
 
-// MarshalJSON customizes how a Note is marshalled in JSON.
-// In particular, we wish to display the UUID as a string instead of a series of bytes.
-func (n *Note) MarshalJSON() ([]byte, error) {
-	if n.Crypted {
-		return json.Marshal(&struct {
-			ID   string
-			Body []byte
-		}{
-			ID:   n.ID.String(),
-			Body: n.Body,
-		})
-	} else {
-		return json.Marshal(&struct {
-			ID   string
-			Body string
-		}{
-			ID:   n.ID.String(),
-			Body: string(n.Body),
-		})
-	}
+// A Document contains arbitrary data.
+type Document struct {
+	ID        uuid.UUID `json:"id"`
+	Contents  []byte    `json:"body"`
+	Encrypted bool
 }
 
 // AES256KeySizeBytes is the appropriate size for an AES256 encryption key
 // See https://golang.org/pkg/crypto/aes/
 const AES256KeySizeBytes int = 32
 
-// MakeNote returns a *Note whose Body is the given body encrypted with the given key.
+// MarshalJSON customizes how a Document is marshalled in JSON.
+func (d *Document) MarshalJSON() ([]byte, error) {
+	if d.Encrypted {
+		return json.Marshal(&struct {
+			ID   string
+			Body []byte
+		}{
+			ID:   d.ID.String(),
+			Body: d.Contents,
+		})
+	}
+	return json.Marshal(&struct {
+		ID   string
+		Body string
+	}{
+		ID:   d.ID.String(),
+		Body: string(d.Contents),
+	})
+}
+
+// MakeDocument returns a *Document whose Body is the given body encrypted with the given key.
 // The ID of the note is a UUID generated at the time of creation.
-func MakeNote(body []byte, key []byte) (*Note, error) {
+func MakeDocument(body []byte, key []byte) (*Document, error) {
 
 	if len(key) != AES256KeySizeBytes {
 		err := errors.New("Tried to make a note with AES256 key of the wrong length")
@@ -84,43 +89,43 @@ func MakeNote(body []byte, key []byte) (*Note, error) {
 
 	body = append(body, padding...)
 
-	n := &Note{
-		ID:   *uuid,
-		Body: body,
+	d := &Document{
+		ID:       *uuid,
+		Contents: body,
 	}
 
-	err = n.encryptInPlace(key)
+	err = d.encryptInPlace(key)
 	if err != nil {
 		log.WithFields(log.Fields{
-			"note":       n,
+			"note":       d,
 			"key_sha256": sha256.Sum256(key),
 		}).Fatal("Failed to encrypt note")
 	}
 
-	return n, nil
+	return d, nil
 }
 
 // encryptInPlace returns an error if the note could not be encrypted.
 // *** WARNING! ***
 // This directly changes the values of its own fields - in other words,
 // this is a destructive/irreversible operation.
-func (n *Note) encryptInPlace(key []byte) error {
-	if len(n.Body)%aes.BlockSize != 0 {
+func (d *Document) encryptInPlace(key []byte) error {
+	if len(d.Contents)%aes.BlockSize != 0 {
 		err := errors.New("Tried to encrypt a plaintext where length % aes.BlockSize != 0")
 		log.WithFields(log.Fields{
-			"id":     n.ID,
-			"body":   n.Body,
-			"length": len(n.Body),
+			"id":     d.ID,
+			"body":   d.Contents,
+			"length": len(d.Contents),
 		}).Fatal("encryptInPlace", err)
 		return err
 	}
 
 	// Add an extra <blocksize> bytes to prepend IV
-	n.Body = append(make([]byte, aes.BlockSize), n.Body...)
+	d.Contents = append(make([]byte, aes.BlockSize), d.Contents...)
 
 	// Fill iv block with random data (iv must be unique but not secure)
 	// (The iv block will not be encrypted)
-	iv := n.Body[:aes.BlockSize]
+	iv := d.Contents[:aes.BlockSize]
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		log.WithFields(log.Fields{
 			"iv": iv,
@@ -137,14 +142,14 @@ func (n *Note) encryptInPlace(key []byte) error {
 	}
 
 	mode := cipher.NewCBCEncrypter(cb, iv)
-	mode.CryptBlocks(n.Body[aes.BlockSize:], n.Body[aes.BlockSize:])
+	mode.CryptBlocks(d.Contents[aes.BlockSize:], d.Contents[aes.BlockSize:])
 
-	n.Crypted = true
+	d.Encrypted = true
 
 	return nil
 }
 
-func (n *Note) decryptInPlace(key []byte) error {
+func (d *Document) decryptInPlace(key []byte) error {
 	cb, err := aes.NewCipher(key)
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -155,8 +160,8 @@ func (n *Note) decryptInPlace(key []byte) error {
 	}
 
 	// Cut off leading iv
-	iv := n.Body[:aes.BlockSize]
-	ciphertext := n.Body[aes.BlockSize:]
+	iv := d.Contents[:aes.BlockSize]
+	ciphertext := d.Contents[aes.BlockSize:]
 
 	mode := cipher.NewCBCDecrypter(cb, iv)
 	mode.CryptBlocks(ciphertext, ciphertext)
@@ -165,17 +170,17 @@ func (n *Note) decryptInPlace(key []byte) error {
 	paddingLength := int(ciphertext[len(ciphertext)-1])
 	cutBody := make([]byte, len(ciphertext)-paddingLength)
 	copy(cutBody, ciphertext[:len(ciphertext)-paddingLength])
-	n.Body = cutBody
+	d.Contents = cutBody
 
 	return nil
 }
 
-// Save a Note, assigning it a UUID and returning that UUID.
-func (n *Note) Save() error {
+// Save a Document, assigning it a UUID and returning that UUID.
+func (d *Document) Save() error {
 
-	if err := saveToDb(n.ID, n.Body); err != nil {
+	if err := saveToDb(d.ID, d.Contents); err != nil {
 		log.WithFields(log.Fields{
-			"note": n,
+			"note": d,
 		}).Fatal("Failed to save note")
 		return err
 	}
@@ -183,30 +188,9 @@ func (n *Note) Save() error {
 	return nil
 }
 
-func saveToDb(uuid uuid.UUID, value []byte) error {
-	db, err := bolt.Open("pasteburn.db", 0600, nil)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
 
-	key := make([]byte, len(uuid))
-	copy(key, uuid[:])
-
-	if err = db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("Notes"))
-		err = b.Put(key, value)
-		return err
-	}); err != nil {
-		log.WithField("function", "saveToDb").Fatal(err)
-		return err
-	}
-
-	return nil
-}
-
-// LoadNote returns the note with the given id, encrypted
-func LoadNote(id uuid.UUID, key []byte) (*Note, error) {
+// LoadDocument returns the note with the given id, encrypted
+func LoadDocument(id uuid.UUID, key []byte) (*Document, error) {
 
 	body, err := loadAndDeleteFromDb(id)
 	if err != nil {
@@ -221,17 +205,17 @@ func LoadNote(id uuid.UUID, key []byte) (*Note, error) {
 		"body": body,
 	}).Debug("Loaded encrypted note")
 
-	n := &Note{
-		ID:   id,
-		Body: body,
+	d := &Document{
+		ID:       id,
+		Contents: body,
 	}
 
-	if len(n.Body) == 0 {
-		// TODO Note has been deleted how to handle this better?
-		return n, nil
+	if len(d.Contents) == 0 {
+		// TODO Document has been deleted how to handle this better?
+		return d, nil
 	}
 
-	if err := n.decryptInPlace(key); err != nil {
+	if err := d.decryptInPlace(key); err != nil {
 		log.WithFields(log.Fields{
 			"id":      id,
 			"keyHash": sha256.Sum256(key),
@@ -239,28 +223,8 @@ func LoadNote(id uuid.UUID, key []byte) (*Note, error) {
 		return nil, err
 	}
 
-	n.Crypted = false
+	d.Encrypted = false
 
-	return n, nil
+	return d, nil
 }
 
-func loadAndDeleteFromDb(key uuid.UUID) ([]byte, error) {
-	db, err := bolt.Open("pasteburn.db", 0600, nil)
-	defer db.Close()
-
-	var value []byte
-
-	if err = db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("Notes"))
-
-		l := b.Get(key[:])
-		value = make([]byte, len(l))
-		copy(value, l)
-
-		return b.Delete(key[:])
-	}); err != nil {
-		return nil, err
-	}
-
-	return value, nil
-}

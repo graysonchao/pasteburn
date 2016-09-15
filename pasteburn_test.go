@@ -13,7 +13,7 @@ func TestMain(m *testing.M) {
 	db, _ := bolt.Open("pasteburn.db", 0600, nil)
 
 	db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("Notes"))
+		_, err := tx.CreateBucketIfNotExists([]byte("Documents"))
 		return err
 	})
 	db.Close()
@@ -25,21 +25,21 @@ func TestMain(m *testing.M) {
 func TestDeletionAfterRead(t *testing.T) {
 	plaintext := []byte("secret")
 	key := []byte("11112222333344445555666677778888")
-	n1, err := MakeNote(plaintext, key)
-	if err := n1.Save(); err != nil {
+	d1, err := MakeDocument(plaintext, key)
+	if err := d1.Save(); err != nil {
 		t.Error(err)
 	}
 
-	n2, err := LoadNote(n1.ID, key)
+	d2, err := LoadDocument(d1.ID, key)
 	if err != nil {
 		t.Error(err)
 	}
-	if n2.Body == nil {
+	if d2.Contents == nil {
 		t.Error("Couldn't read body the first time")
 	}
 
-	n3, err := LoadNote(n1.ID, key)
-	if len(n3.Body) > 0 {
+	d3, err := LoadDocument(d1.ID, key)
+	if len(d3.Contents) > 0 {
 		t.Error("Shouldn't be able to read note again!")
 	}
 
@@ -48,16 +48,16 @@ func TestDeletionAfterRead(t *testing.T) {
 func TestEncryptedOnDisk(t *testing.T) {
 	plaintext := []byte("secret")
 	key := []byte("11112222333344445555666677778888")
-	n1, err := MakeNote(plaintext, key)
+	d1, err := MakeDocument(plaintext, key)
 	if err != nil {
 		t.Error(err)
 	}
 
-	if err = n1.Save(); err != nil {
+	if err = d1.Save(); err != nil {
 		t.Error(err)
 	}
 
-	id := n1.ID
+	id := d1.ID
 
 	ciphertext, err := loadAndDeleteFromDb(id)
 	if err != nil {
@@ -65,29 +65,29 @@ func TestEncryptedOnDisk(t *testing.T) {
 	}
 
 	if bytes.Compare(ciphertext, plaintext) == 0 {
-		t.Error("Note was not encrypted")
+		t.Error("Document was not encrypted")
 	}
 }
 
 func TestDecryption(t *testing.T) {
 	plaintext := []byte("secret")
 	key := []byte("11112222333344445555666677778888")
-	n1, err := MakeNote(plaintext, key)
+	d1, err := MakeDocument(plaintext, key)
 	if err != nil {
 		t.Error(err)
 	}
 
-	if err = n1.Save(); err != nil {
+	if err = d1.Save(); err != nil {
 		t.Error(err)
 	}
 
-	id := n1.ID
+	id := d1.ID
 
-	n2, err := LoadNote(id, key)
+	d2, err := LoadDocument(id, key)
 
-	plaintext2 := n2.Body
+	plaintext2 := d2.Contents
 
 	if bytes.Compare(plaintext, plaintext2) != 0 {
-		t.Error("Note was not properly decrypted")
+		t.Error("Document was not properly decrypted")
 	}
 }
