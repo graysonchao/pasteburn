@@ -13,8 +13,8 @@ import (
 
 type handler func(w http.ResponseWriter, r *http.Request)
 
-// MakeAddHandler returns a handler that uses a Service to serve add requests
-func MakeAddHandler(ctx context.Context, s Service) handler {
+// MakeTextAddHandler returns a handler that uses a Service to serve add requests
+func MakeTextAddHandler(ctx context.Context, s Service) handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 		} else {
@@ -31,7 +31,7 @@ func MakeAddHandler(ctx context.Context, s Service) handler {
 				fmt.Fprintf(w, "Error! %s", err)
 			}
 
-			d, err := MakeDocumentRandomID([]byte(req.Body), []byte(req.Key))
+			d, err := NewDocument([]byte(req.Body), []byte(req.Key))
 			if err != nil {
 				fmt.Fprintf(w, "Error! %s", err)
 			}
@@ -43,11 +43,11 @@ func MakeAddHandler(ctx context.Context, s Service) handler {
 	}
 }
 
-// MakeViewHandler returns a handler that uses a Service to serve view requests
-func MakeViewHandler(ctx context.Context, s Service) handler {
+// MakeTextViewHandler returns a handler that uses a Service to serve view requests
+func MakeTextViewHandler(ctx context.Context, s Service) handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
-		id, err := uuid.ParseHex(query.Get("name"))
+		id, err := uuid.ParseHex(query.Get("id"))
 		if err != nil {
 			panic(err)
 		}
@@ -56,6 +56,67 @@ func MakeViewHandler(ctx context.Context, s Service) handler {
 
 		d, err := s.GetDocument(ctx, *id, key)
 
-		json.NewEncoder(w).Encode(d)
+		json.NewEncoder(w).Encode(&struct {
+			id   string
+			body string
+		}{
+			id:   d.ID.String(),
+			body: string(d.Contents),
+		})
+	}
+}
+
+// MakeImageAddHandler returns a handler that uses a Service to serve add requests
+func MakeImageAddHandler(ctx context.Context, s Service) handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+		} else {
+			key := r.FormValue("key")
+
+			file, _, err := r.FormFile("image")
+			if err != nil {
+				fmt.Fprintf(w, "Error! %s", err)
+			}
+
+			rawImage, err := ioutil.ReadAll(file)
+			if err != nil {
+				fmt.Fprintf(w, "Error! %s", err)
+			}
+
+			d, err := NewDocument(rawImage, []byte(key))
+			if err != nil {
+				fmt.Fprintf(w, "Error! %s", err)
+			}
+
+			err = s.PostDocument(ctx, d)
+			if err != nil {
+				fmt.Fprintf(w, "Error! %s", err)
+			}
+
+			json.NewEncoder(w).Encode(d)
+		}
+	}
+}
+
+// MakeImageViewHandler returns a handler that uses a Service to serve view requests
+func MakeImageViewHandler(ctx context.Context, s Service) handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+		id, err := uuid.ParseHex(query.Get("id"))
+		if err != nil {
+			panic(err)
+		}
+
+		key := []byte(query.Get("key"))
+
+		d, err := s.GetDocument(ctx, *id, key)
+
+		rawData := d.Contents
+		contentType := http.DetectContentType(rawData)
+
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Length", string(len(d.Contents)))
+
+		w.Write(rawData)
 	}
 }

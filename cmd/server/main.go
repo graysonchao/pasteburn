@@ -25,7 +25,9 @@ func main() {
 
 	ctx := context.Background()
 
-	http.HandleFunc("/api/view", pasteburn.MakeViewHandler(ctx, s))
-	http.HandleFunc("/api/create", pasteburn.MakeAddHandler(ctx, s))
+	http.HandleFunc("/api/text/view", pasteburn.MakeTextViewHandler(ctx, s))
+	http.HandleFunc("/api/text/create", pasteburn.MakeTextAddHandler(ctx, s))
+	http.HandleFunc("/api/image/view", pasteburn.MakeImageViewHandler(ctx, s))
+	http.HandleFunc("/api/image/create", pasteburn.MakeImageAddHandler(ctx, s))
 	http.ListenAndServe("127.0.0.1:8080", nil)
 }
