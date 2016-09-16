@@ -9,7 +9,7 @@ func TestEncryptionOnCreate(t *testing.T) {
 	plaintext := []byte("secret")
 	key := []byte("11112222333344445555666677778888")
 
-	d, err := MakeDocumentRandomID(plaintext, key)
+	d, err := NewDocument(plaintext, key)
 	if err != nil {
 		t.Error(err)
 	}
@@ -24,8 +24,8 @@ func TestEncryptionOnCreate(t *testing.T) {
 func TestEncryptionNonce(t *testing.T) {
 	plaintext := []byte("secret")
 	key := []byte("11112222333344445555666677778888")
-	d1, err := MakeDocumentRandomID(plaintext, key)
-	d2, err := MakeDocumentRandomID(plaintext, key)
+	d1, err := NewDocument(plaintext, key)
+	d2, err := NewDocument(plaintext, key)
 	if err != nil {
 		t.Error(err)
 	}
@@ -42,8 +42,8 @@ func TestDecryptionConsistency(t *testing.T) {
 	key1 := []byte("11112222333344445555666677778888")
 	key2 := []byte("AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHH")
 
-	d1, err := MakeDocumentRandomID(plaintext, key1)
-	d2, err := MakeDocumentRandomID(plaintext, key2)
+	d1, err := NewDocument(plaintext, key1)
+	d2, err := NewDocument(plaintext, key2)
 	if err != nil {
 		t.Error(err)
 	}

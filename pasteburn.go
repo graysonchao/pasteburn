@@ -64,7 +64,7 @@ func (s *BoltBackedService) GetDocument(ctx context.Context, id uuid.UUID, key [
 
 	log.WithFields(log.Fields{
 		"id": id,
-	}).Debug("Loaded encrypted note")
+	}).Debug("Loaded encrypted document")
 
 	if len(d.Contents) == 0 {
 		// TODO Document has been deleted how to handle this better?
@@ -75,7 +75,7 @@ func (s *BoltBackedService) GetDocument(ctx context.Context, id uuid.UUID, key [
 		log.WithFields(log.Fields{
 			"id":      id,
 			"keyHash": sha256.Sum256(key),
-		}).Fatal("Failed to decrypt note")
+		}).Fatal("Failed to decrypt document")
 		return nil, err
 	}
 

@@ -1,5 +1,4 @@
 * # of reads before expiry configurable
-* Support images
 * Support video
 * Support binary
 * Streaming with on-the-fly decryption

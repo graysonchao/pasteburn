@@ -29,34 +29,32 @@ const AES256KeySizeBytes int = 32
 func (d *Document) MarshalJSON() ([]byte, error) {
 	if d.Encrypted {
 		return json.Marshal(&struct {
-			ID   string
-			Body []byte
+			ID   string `json:"id"`
+			Body string `json:"body"`
 		}{
-			ID:   d.ID.String(),
-			Body: d.Contents,
+			ID: d.ID.String(),
 		})
 	}
 	return json.Marshal(&struct {
-		ID   string
-		Body string
+		ID   string `json:"id"`
+		Body string `json:"body"`
 	}{
 		ID:   d.ID.String(),
 		Body: string(d.Contents),
 	})
 }
 
-// MakeDocumentRandomID makes a document with a random ID.
-func MakeDocumentRandomID(body []byte, key []byte) (*Document, error) {
+// NewDocument makes a document with a random ID.
+func NewDocument(body []byte, key []byte) (*Document, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, err
 	}
-	return MakeDocument(id, body, key)
+	return NewDocumentWithID(id, body, key)
 }
 
-// MakeDocument returns a *Document whose Body is the given body encrypted with the given key.
-func MakeDocument(id *uuid.UUID, body []byte, key []byte) (*Document, error) {
-
+// NewDocumentWithID returns a *Document whose Body is the given body encrypted with the given key.
+func NewDocumentWithID(id *uuid.UUID, body []byte, key []byte) (*Document, error) {
 	if len(key) != AES256KeySizeBytes {
 		err := errors.New("Tried to make a note with AES256 key of the wrong length")
 		log.WithFields(log.Fields{
