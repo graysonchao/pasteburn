@@ -9,7 +9,9 @@ import (
 // DatabaseService defines operations on the backing database.
 type DatabaseService interface {
 	SaveDocument(*Document) error
-	LoadDocument(uuid.UUID) (*Document, error)
+	SaveMultiDoc(*MultiDoc) error
+	LoadDocument(id uuid.UUID) (*Document, error)
+	LoadMultiDoc(id uuid.UUID, idx byte) (*Document, error)
 }
 
 // BoltDBService implements DatabaseService using Bolt.
@@ -106,4 +108,65 @@ func (s BoltDBService) SaveDocument(d *Document) error {
 	}
 
 	return nil
+}
+
+// SaveMultiDoc saves a MultiDoc for later retrieval.
+func (s BoltDBService) SaveMultiDoc(md *MultiDoc) error {
+	db, err := bolt.Open(s.dbPath, 0600, nil)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	if err = db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists(md.ID[:])
+		if err != nil {
+			return err
+		}
+
+		for idx, d := range md.Documents {
+			err = b.Put([]byte{idx}, d.Contents)
+			if err != nil {
+				return err
+			}
+		}
+
+		return err
+	}); err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	return nil
+}
+
+// LoadMultiDoc loads the Document at the given idx from a stored MultiDoc.
+func (s BoltDBService) LoadMultiDoc(id uuid.UUID, idx byte) (*Document, error) {
+	db, err := bolt.Open(s.dbPath, 0600, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	var value []byte
+
+	if err = db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(id[:])
+
+		l := b.Get([]byte{idx})
+
+		value = make([]byte, len(l))
+		copy(value, l)
+
+		return b.Delete([]byte{idx})
+	}); err != nil {
+		return nil, err
+	}
+
+	d := &Document{
+		ID:       id,
+		Contents: value,
+	}
+
+	return d, nil
 }

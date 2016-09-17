@@ -21,6 +21,12 @@ type Document struct {
 	Encrypted bool
 }
 
+// A MultiDoc is a set of documents all grouped under a single ID.
+type MultiDoc struct {
+	ID        uuid.UUID
+	Documents map[byte]*Document
+}
+
 // AES256KeySizeBytes is the appropriate size for an AES256 encryption key
 // See https://golang.org/pkg/crypto/aes/
 const AES256KeySizeBytes int = 32
@@ -42,6 +48,64 @@ func (d *Document) MarshalJSON() ([]byte, error) {
 		ID:   d.ID.String(),
 		Body: string(d.Contents),
 	})
+}
+
+// Save a Document
+func (d *Document) SaveDoc(db DatabaseService) error {
+
+	if err := db.SaveDocument(d); err != nil {
+		log.WithFields(log.Fields{}).Fatal("Failed to save document")
+		return err
+	}
+
+	return nil
+}
+
+// Save a MultiDoc
+func (md *MultiDoc) SaveMD(db DatabaseService) error {
+
+	if err := db.SaveMultiDoc(md); err != nil {
+		log.WithFields(log.Fields{}).Fatal("Failed to save document")
+		return err
+	}
+
+	return nil
+
+}
+
+// NewMultiDoc returns a multidoc with N copies of a data body.
+// Only byte copies are allowed for space reasons.
+func NewMultiDoc(body []byte, key []byte, count byte) (*MultiDoc, [][]byte, error) {
+	id, err := uuid.NewV4()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	md := &MultiDoc{
+		ID:        *id,
+		Documents: make(map[byte]*Document),
+	}
+
+	keys := make([][]byte, count)
+
+	for i := byte(0); i < count; i++ {
+		key, err := GenerateKey()
+		if err != nil {
+			return md, nil, err
+		}
+
+		// Append the bucket index as an extra byte to the key we return
+		keys[i] = append([]byte{i}, key...)
+
+		d, err := NewDocument(body, key)
+		if err != nil {
+			return md, nil, err
+		}
+
+		md.Documents[i] = d
+	}
+
+	return md, keys, nil
 }
 
 // NewDocument makes a document with a random ID.
