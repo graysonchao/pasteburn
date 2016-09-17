@@ -1,0 +1,27 @@
+{
+  "name": "client",
+  "version": "0.1.0",
+  "private": true,
+  "devDependencies": {
+    "react-scripts": "0.4.1"
+  },
+  "dependencies": {
+    "elemental": "^0.6.1",
+    "node-uuid": "^1.4.7",
+    "radium": "^0.18.1",
+    "radium-grid": "^2.0.1",
+    "react": "^15.3.1",
+    "react-addons-css-transition-group": "^15.3.1",
+    "react-dom": "^15.3.1",
+    "validator": "^5.7.0"
+  },
+  "scripts": {
+    "start": "lessc ./node_modules/elemental/less/elemental.less ./src/styles.min.css && react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test --env=jsdom",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": "./node_modules/react-scripts/config/eslint.js"
+  }
+}
